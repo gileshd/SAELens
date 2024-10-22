@@ -332,17 +332,18 @@ class TrainingSAE(SAE):
         elif self.cfg.architecture == "log_batch_loss":
 
             c = self.cfg.log_loss_coefficient
-            def log_l1_loss(tensor: torch.Tensor, c:int=100):
+            def log_l1_loss(tensor: torch.Tensor, c:float=1):
                 """
                 tensor: batch x d
                 """
+                assert(len(tensor.shape)==2)
                 mean_act = torch.mean(torch.abs(tensor), dim=0)
                 scaled_act = torch.log(1+ c*mean_act)
                 return torch.sum(scaled_act)
-
-            log_loss = log_l1_loss(feature_acts, c)
-
-            l1_loss = (current_l1_coefficient * log_loss).mean()
+            
+            weighted_feature_acts = feature_acts * self.W_dec.norm(dim=1)
+            log_loss = log_l1_loss(weighted_feature_acts, c)
+            l1_loss = (current_l1_coefficient * log_loss)
             loss = mse_loss + l1_loss + ghost_grad_loss
 
             aux_reconstruction_loss = torch.tensor(0.0)
