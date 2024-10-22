@@ -158,7 +158,7 @@ class SAE(HookedRootModule):
         if self.cfg.architecture == "standard":
             self.initialize_weights_basic()
             self.encode = self.encode_standard
-        elif self.cfg.architecture == "log_batch_loss":
+        if self.cfg.architecture == "log_batch_loss":
             self.initialize_weights_basic()
             self.encode = self.encode_standard
         elif self.cfg.architecture == "gated":
@@ -400,7 +400,7 @@ class SAE(HookedRootModule):
         sae_out = self.decode(feature_acts)
 
         # TEMP
-        if self.use_error_term and self.cfg.architecture == "standard":
+        if self.use_error_term and self.cfg.architecture in ["standard", "log_batch_loss"]:
             with torch.no_grad():
                 # Recompute everything without hooks to get true error term
                 # Otherwise, the output with error term will always equal input, even for causal interventions that affect x_reconstruct
