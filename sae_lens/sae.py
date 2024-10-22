@@ -160,7 +160,7 @@ class SAE(HookedRootModule):
         if self.cfg.architecture == "standard":
             self.initialize_weights_basic()
             self.encode = self.encode_standard
-        elif self.cfg.architecture == "log_batch_loss":
+        if self.cfg.architecture == "log_batch_loss":
             self.initialize_weights_basic()
             self.encode = self.encode_standard
         elif self.cfg.architecture == "gated":
