@@ -47,6 +47,7 @@ class TrainingSAEConfig(SAEConfig):
     noise_scale: float
     decoder_orthogonal_init: bool
     mse_loss_normalization: Optional[str]
+    log_loss_coefficient: float = 1.
     decoder_heuristic_init: bool = False
     init_encoder_as_decoder_transpose: bool = False
     scale_sparsity_penalty_by_decoder_norm: bool = False
@@ -316,6 +317,25 @@ class TrainingSAE(SAE):
             ).mean()
 
             loss = mse_loss + l1_loss + aux_reconstruction_loss
+
+        elif self.cfg.architecture == "log_batch_loss":
+
+            c = self.cfg.log_loss_coefficient
+            def log_l1_loss(tensor: torch.Tensor, c:int=100):
+                """
+                tensor: batch x d
+                """
+                mean_act = torch.mean(torch.abs(tensor), dim=0)
+                scaled_act = torch.log(1+ c*mean_act)
+                return torch.sum(scaled_act)
+
+            log_loss = log_l1_loss(feature_acts, c)
+
+            l1_loss = (current_l1_coefficient * log_loss).mean()
+            loss = mse_loss + l1_loss + ghost_grad_loss
+
+            aux_reconstruction_loss = torch.tensor(0.0)
+
         else:
             # default SAE sparsity loss
             weighted_feature_acts = feature_acts * self.W_dec.norm(dim=1)
