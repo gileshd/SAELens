@@ -186,6 +186,7 @@ class LanguageModelSAERunnerConfig:
     lp_norm: float = 1
     scale_sparsity_penalty_by_decoder_norm: bool = False
     l1_warm_up_steps: int = 0
+    log_loss_coefficient: float = 1.
 
     ## Learning Rate Schedule
     lr: float = 3e-4
