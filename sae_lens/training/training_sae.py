@@ -47,10 +47,11 @@ class TrainingSAEConfig(SAEConfig):
     noise_scale: float
     decoder_orthogonal_init: bool
     mse_loss_normalization: Optional[str]
-    log_loss_coefficient: float = 1.
     decoder_heuristic_init: bool = False
     init_encoder_as_decoder_transpose: bool = False
     scale_sparsity_penalty_by_decoder_norm: bool = False
+    log_loss_coefficient: float = 1
+    new_log_rate:float = 4
 
     @classmethod
     def from_sae_runner_config(
@@ -91,6 +92,8 @@ class TrainingSAEConfig(SAEConfig):
             normalize_activations=cfg.normalize_activations,
             dataset_trust_remote_code=cfg.dataset_trust_remote_code,
             model_from_pretrained_kwargs=cfg.model_from_pretrained_kwargs,
+
+            
         )
 
     @classmethod
@@ -332,6 +335,22 @@ class TrainingSAE(SAE):
             
             weighted_feature_acts = feature_acts * self.W_dec.norm(dim=1)
             log_loss = log_l1_loss(weighted_feature_acts, c)
+            l1_loss = (current_l1_coefficient * log_loss)
+            loss = mse_loss + l1_loss + ghost_grad_loss
+
+            aux_reconstruction_loss = torch.tensor(0.0)
+
+        elif self.cfg.architecture == "new_log_loss":
+            def new_log_loss(tensor: torch.Tensor, rate:float=4, epsilon:float=1e-6, anchor:float=1e-3):
+                """
+                anchor = a scaling parameter setting the place where marginal_cost = 1, should be around mean activation
+                """
+                mean_act = torch.mean(torch.abs(tensor), dim=0, keepdims=True)
+                marginal_loss = (anchor/(mean_act.detach()+epsilon))**(1/rate)
+                return torch.sum(marginal_loss*mean_act)
+            
+            weighted_feature_acts = feature_acts * self.W_dec.norm(dim=1)
+            log_loss = new_log_loss(weighted_feature_acts, rate=self.cfg.new_log_rate)
             l1_loss = (current_l1_coefficient * log_loss)
             loss = mse_loss + l1_loss + ghost_grad_loss
 

@@ -187,6 +187,7 @@ class LanguageModelSAERunnerConfig:
     scale_sparsity_penalty_by_decoder_norm: bool = False
     l1_warm_up_steps: int = 0
     log_loss_coefficient: float = 1.
+    new_log_rate: float = 4.
 
     ## Learning Rate Schedule
     lr: float = 3e-4
@@ -403,6 +404,7 @@ class LanguageModelSAERunnerConfig:
             **self.get_base_sae_cfg_dict(),
             "l1_coefficient": self.l1_coefficient,
             "log_loss_coefficient": self.log_loss_coefficient,
+            "new_log_rate": self.new_log_rate,
             "lp_norm": self.lp_norm,
             "use_ghost_grads": self.use_ghost_grads,
             "normalize_sae_decoder": self.normalize_sae_decoder,
