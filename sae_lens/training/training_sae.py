@@ -179,7 +179,7 @@ class TrainingSAE(SAE):
 
         self.encode_with_hidden_pre_fn = (
             self.encode_with_hidden_pre
-            if cfg.architecture != "gated"
+            if cfg.architecture not in ("gated", "gated_new_log")
             else self.encode_with_hidden_pre_gated
         )
 
@@ -312,6 +312,39 @@ class TrainingSAE(SAE):
                 current_l1_coefficient
                 * torch.sum(pi_gate_act * self.W_dec.norm(dim=1), dim=-1).mean()
             )
+
+            # Auxiliary reconstruction loss - summed over the feature dimension and averaged over the batch
+            via_gate_reconstruction = pi_gate_act @ self.W_dec + self.b_dec
+            aux_reconstruction_loss = torch.sum(
+                (via_gate_reconstruction - sae_in) ** 2, dim=-1
+            ).mean()
+
+            loss = mse_loss + l1_loss + aux_reconstruction_loss
+
+        if self.cfg.architecture == "gated_new_log":
+            # Gated SAE Loss Calculation
+
+            # Shared variables
+            sae_in_centered = (
+                self.reshape_fn_in(sae_in) - self.b_dec * self.cfg.apply_b_dec_to_input
+            )
+            pi_gate = sae_in_centered @ self.W_enc + self.b_gate
+            pi_gate_act = torch.relu(pi_gate)
+
+            def new_log_loss(tensor: torch.Tensor, rate:float=4, epsilon:float=1e-6, anchor:float=1e-3, running_avg_beta=0.9):
+                """
+                anchor = a scaling parameter setting the place where marginal_cost = 1, should be around mean activation
+                """
+                mean_act = torch.mean(torch.abs(tensor), dim=0, keepdims=True)
+                self.avg_acts = running_avg_beta*self.avg_acts + (1-running_avg_beta)*mean_act.detach()
+                #print(torch.min(self.avg_acts), torch.max(self.avg_acts))
+                marginal_loss = (anchor/(self.avg_acts+epsilon))**(1/rate)
+                return torch.sum(marginal_loss*mean_act)
+
+            # SFN sparsity loss - summed over the feature dimension and averaged over the batch
+            weighted_pi_gate_act = pi_gate_act * self.W_dec.norm(dim=1)
+            log_loss = new_log_loss(weighted_pi_gate_act, rate=self.cfg.new_log_rate)
+            l1_loss = current_l1_coefficient * log_loss
 
             # Auxiliary reconstruction loss - summed over the feature dimension and averaged over the batch
             via_gate_reconstruction = pi_gate_act @ self.W_dec + self.b_dec
