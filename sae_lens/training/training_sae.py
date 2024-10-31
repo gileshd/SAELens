@@ -341,12 +341,14 @@ class TrainingSAE(SAE):
             aux_reconstruction_loss = torch.tensor(0.0)
 
         elif self.cfg.architecture == "new_log_loss":
-            def new_log_loss(tensor: torch.Tensor, rate:float=4, epsilon:float=1e-6, anchor:float=1e-3):
+            def new_log_loss(tensor: torch.Tensor, rate:float=4, epsilon:float=1e-6, anchor:float=1e-3, running_avg_beta=0.9):
                 """
                 anchor = a scaling parameter setting the place where marginal_cost = 1, should be around mean activation
                 """
                 mean_act = torch.mean(torch.abs(tensor), dim=0, keepdims=True)
-                marginal_loss = (anchor/(mean_act.detach()+epsilon))**(1/rate)
+                self.avg_acts = running_avg_beta*self.avg_acts + (1-running_avg_beta)*mean_act.detach()
+                #print(torch.min(self.avg_acts), torch.max(self.avg_acts))
+                marginal_loss = (anchor/(self.avg_acts+epsilon))**(1/rate)
                 return torch.sum(marginal_loss*mean_act)
             
             weighted_feature_acts = feature_acts * self.W_dec.norm(dim=1)

@@ -163,6 +163,7 @@ class SAE(HookedRootModule):
         elif self.cfg.architecture in ("log_batch_loss", "new_log_loss"):
             self.initialize_weights_basic()
             self.encode = self.encode_standard
+            self.avg_acts = torch.zeros([1, self.cfg.d_sae], device=self.device, requires_grad=False)
         elif self.cfg.architecture == "gated":
             self.initialize_weights_gated()
             self.encode = self.encode_gated
@@ -512,7 +513,7 @@ class SAE(HookedRootModule):
         self.W_enc.data = self.W_enc.data * activation_norm_scaling_factor
         # previously weren't doing this.
         self.W_dec.data = self.W_dec.data / activation_norm_scaling_factor
-
+        self.b_dec.data = self.b_dec.data / activation_norm_scaling_factor
         # once we normalize, we shouldn't need to scale activations.
         self.cfg.normalize_activations = "none"
 
