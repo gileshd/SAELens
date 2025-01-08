@@ -167,7 +167,7 @@ class SAE(HookedRootModule):
         elif self.cfg.architecture == "gated":
             self.initialize_weights_gated()
             self.encode = self.encode_gated
-        elif self.cfg.architecture == "gated_new_log":
+        elif self.cfg.architecture in ("gated_new_log", "gated_log_marginal"):
             self.initialize_weights_gated()
             self.encode = self.encode_gated
             self.avg_acts = torch.zeros([1, self.cfg.d_sae], device=self.device, requires_grad=False)
@@ -503,7 +503,7 @@ class SAE(HookedRootModule):
         W_dec_norms = self.W_dec.norm(dim=-1).unsqueeze(1)
         self.W_dec.data = self.W_dec.data / W_dec_norms
         self.W_enc.data = self.W_enc.data * W_dec_norms.T
-        if self.cfg.architecture in ("gated", "gated_new_log"):
+        if self.cfg.architecture in ("gated", "gated_new_log", "gated_log_marginal"):
             self.r_mag.data = self.r_mag.data * W_dec_norms.squeeze()
             self.b_gate.data = self.b_gate.data * W_dec_norms.squeeze()
             self.b_mag.data = self.b_mag.data * W_dec_norms.squeeze()

@@ -179,7 +179,7 @@ class TrainingSAE(SAE):
 
         self.encode_with_hidden_pre_fn = (
             self.encode_with_hidden_pre
-            if cfg.architecture not in ("gated", "gated_new_log")
+            if cfg.architecture not in ("gated", "gated_new_log", "gated_log_marginal")
             else self.encode_with_hidden_pre_gated
         )
 
@@ -200,7 +200,7 @@ class TrainingSAE(SAE):
         return cls(TrainingSAEConfig.from_dict(config_dict))
 
     def check_cfg_compatibility(self):
-        if self.cfg.architecture == "gated":
+        if self.cfg.architecture in ("gated", "gated_new_log", "gated_log_marginal"):
             assert (
                 self.cfg.use_ghost_grads is False
             ), "Gated SAEs do not support ghost grads"
@@ -321,7 +321,7 @@ class TrainingSAE(SAE):
 
             loss = mse_loss + l1_loss + aux_reconstruction_loss
 
-        if self.cfg.architecture == "gated_new_log":
+        elif self.cfg.architecture == "gated_new_log":
             # Gated SAE Loss Calculation
 
             # Shared variables
@@ -344,6 +344,43 @@ class TrainingSAE(SAE):
             # SFN sparsity loss - summed over the feature dimension and averaged over the batch
             weighted_pi_gate_act = pi_gate_act * self.W_dec.norm(dim=1)
             log_loss = new_log_loss(weighted_pi_gate_act, rate=self.cfg.new_log_rate)
+            l1_loss = current_l1_coefficient * log_loss
+
+            # Auxiliary reconstruction loss - summed over the feature dimension and averaged over the batch
+            via_gate_reconstruction = pi_gate_act @ self.W_dec + self.b_dec
+            aux_reconstruction_loss = torch.sum(
+                (via_gate_reconstruction - sae_in) ** 2, dim=-1
+            ).mean()
+
+            loss = mse_loss + l1_loss + aux_reconstruction_loss
+
+        elif self.cfg.architecture == "gated_log_marginal":
+            # Gated SAE Loss Calculation
+
+            # Shared variables
+            sae_in_centered = (
+                self.reshape_fn_in(sae_in) - self.b_dec * self.cfg.apply_b_dec_to_input
+            )
+            pi_gate = sae_in_centered @ self.W_enc + self.b_gate
+            pi_gate_act = torch.relu(pi_gate)
+
+            def log_marginal_loss(tensor: torch.Tensor, epsilon:float=1e-9, anchor:float=1e-3, running_avg_beta=0.9):
+                """
+                anchor = a scaling parameter setting the place where marginal_cost = 1, should be around mean activation
+                """
+                act_freq = torch.mean(torch.abs(tensor)>0, dim=0, keepdims=True, dtype=float)
+                self.avg_acts = running_avg_beta*self.avg_acts + (1-running_avg_beta)*act_freq.detach()
+                #print(torch.min(self.avg_acts), torch.max(self.avg_acts))
+                anchor_cost = 1-torch.log(torch.tensor(anchor))
+                curr_cost = 1-torch.log(self.avg_acts.detach()+epsilon)
+                marginal_cost = curr_cost/anchor_cost
+                mean_act = torch.mean(torch.abs(tensor), dim=0, keepdims=True)
+                
+                return torch.sum(marginal_cost*mean_act)
+
+            # SFN sparsity loss - summed over the feature dimension and averaged over the batch
+            weighted_pi_gate_act = pi_gate_act * self.W_dec.norm(dim=1)
+            log_loss = log_marginal_loss(weighted_pi_gate_act)
             l1_loss = current_l1_coefficient * log_loss
 
             # Auxiliary reconstruction loss - summed over the feature dimension and averaged over the batch
